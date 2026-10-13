@@ -1,0 +1,300 @@
+---
+# init_k8s_worker.yaml
+# Ubuntu 24.04 / AWS：Kubernetes 节点基础环境与 containerd 运行时
+- name: Initialize Kubernetes node runtime
+  hosts: all
+  become: true
+
+  vars:
+    timezone: Asia/Shanghai
+    aws_ntp_server: "169.254.169.123"
+    containerd_version: "2.0.5"
+    crictl_version: "v1.32.0"
+    nerdctl_version: "2.0.3"
+
+    arch_map:
+      x86_64: amd64
+      aarch64: arm64
+
+    # 可选：填入对应发布包的 SHA256，例如 "sha256:实际哈希值"。
+    # 不填写时可以运行，但下载包不会进行固定哈希校验。
+    # containerd_checksum: "sha256:..."
+    # crictl_checksum: "sha256:..."
+    # nerdctl_checksum: "sha256:..."
+
+  pre_tasks:
+    - name: Check supported OS and architecture
+      ansible.builtin.assert:
+        that:
+          - ansible_distribution == "Ubuntu"
+          - ansible_distribution_version == "24.04"
+          - ansible_architecture in arch_map
+        fail_msg: "此 playbook 仅针对 Ubuntu 24.04 的 x86_64/aarch64 编写。"
+
+    - name: Set release architecture
+      ansible.builtin.set_fact:
+        go_arch: "{{ arch_map[ansible_architecture] }}"
+
+    - name: Display node information
+      ansible.builtin.debug:
+        msg:
+          - "OS: {{ ansible_distribution }} {{ ansible_distribution_version }}"
+          - "Arch: {{ ansible_architecture }} -> {{ go_arch }}"
+          - "Hostname: {{ ansible_hostname }}"
+          - "IP: {{ ansible_default_ipv4.address | default('N/A') }}"
+
+  tasks:
+    # 1. 时间同步
+    - name: Set timezone
+      community.general.timezone:
+        name: "{{ timezone }}"
+
+    - name: Install chrony
+      ansible.builtin.apt:
+        name: chrony
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Configure AWS Time Sync Service
+      ansible.builtin.copy:
+        dest: /etc/chrony/chrony.conf
+        mode: "0644"
+        content: |
+          # 仅适用于能够访问 AWS Time Sync Service 的节点
+          server {{ aws_ntp_server }} prefer iburst minpoll 4 maxpoll 6
+
+          driftfile /var/lib/chrony/chrony.drift
+          leapsectz right/UTC
+          makestep 1.0 3
+      notify: Restart chrony
+
+    - name: Ensure chrony is enabled and running
+      ansible.builtin.systemd:
+        name: chrony
+        enabled: true
+        state: started
+        
+    - name: "Disable UFW firewall"
+      ansible.builtin.systemd:
+        name: ufw
+        state: stopped
+        enabled: false
+      failed_when: false
+
+    # 2. Swap
+    - name: Read active swap entries
+      ansible.builtin.command: cat /proc/swaps
+      register: active_swaps
+      changed_when: false
+
+    - name: Disable active swap
+      ansible.builtin.command: swapoff -a
+      when: active_swaps.stdout_lines | length > 1
+
+    - name: Comment out uncommented swap entries in fstab
+      ansible.builtin.replace:
+        path: /etc/fstab
+        regexp: '^(?!\s*#)(\s*\S+\s+\S+\s+swap\s+.*)$'
+        replace: '# \1'
+
+    # 3. 内核模块
+    - name: Configure kernel modules to load on boot
+      ansible.builtin.copy:
+        dest: /etc/modules-load.d/k8s.conf
+        mode: "0644"
+        content: |
+          overlay
+          br_netfilter
+
+    - name: Load required kernel modules
+      community.general.modprobe:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - overlay
+        - br_netfilter
+
+    # 4. sysctl
+    - name: Configure Kubernetes network sysctls
+      ansible.posix.sysctl:
+        name: "{{ item.key }}"
+        value: "{{ item.value }}"
+        sysctl_set: true
+        reload: true
+        sysctl_file: /etc/sysctl.d/k8s.conf
+      loop:
+        - { key: "net.bridge.bridge-nf-call-iptables", value: "1" }
+        - { key: "net.bridge.bridge-nf-call-ip6tables", value: "1" }
+        - { key: "net.ipv4.ip_forward", value: "1" }
+
+    # 5. OCI runtime：标准版 containerd tar 包不包含 runc
+    - name: Install runc
+      ansible.builtin.apt:
+        name: runc
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    # 6. containerd
+    - name: Check installed containerd version
+      ansible.builtin.command: /usr/local/bin/containerd --version
+      register: installed_containerd
+      failed_when: false
+      changed_when: false
+
+    - name: Download containerd
+      ansible.builtin.get_url:
+        url: >-
+          https://github.com/containerd/containerd/releases/download/v{{ containerd_version }}/containerd-{{ containerd_version }}-linux-{{ go_arch }}.tar.gz
+        dest: "/tmp/containerd-{{ containerd_version }}-linux-{{ go_arch }}.tar.gz"
+        mode: "0644"
+        checksum: "{{ containerd_checksum | default(omit) }}"
+
+    - name: Install or upgrade containerd binaries
+      ansible.builtin.unarchive:
+        src: "/tmp/containerd-{{ containerd_version }}-linux-{{ go_arch }}.tar.gz"
+        dest: /usr/local
+        remote_src: true
+      when: >
+        installed_containerd.rc != 0 or
+        containerd_version not in installed_containerd.stdout
+      notify: Restart containerd
+
+    - name: Install containerd systemd unit
+      ansible.builtin.get_url:
+        url: >-
+          https://raw.githubusercontent.com/containerd/containerd/v{{ containerd_version }}/containerd.service
+        dest: /etc/systemd/system/containerd.service
+        mode: "0644"
+      notify: Restart containerd
+
+    - name: Create containerd configuration directory
+      ansible.builtin.file:
+        path: /etc/containerd
+        state: directory
+        mode: "0755"
+
+    - name: Configure containerd 2.x CRI runtime and systemd cgroups
+      ansible.builtin.copy:
+        dest: /etc/containerd/config.toml
+        mode: "0644"
+        content: |
+          version = 3
+
+          [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.runc]
+            runtime_type = 'io.containerd.runc.v2'
+
+          [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.runc.options]
+            SystemdCgroup = true
+      notify: Restart containerd
+
+    - name: Enable and start containerd
+      ansible.builtin.systemd:
+        name: containerd
+        enabled: true
+        state: started
+        daemon_reload: true
+
+    # 7. crictl
+    - name: Check installed crictl version
+      ansible.builtin.command: /usr/local/bin/crictl --version
+      register: installed_crictl
+      failed_when: false
+      changed_when: false
+
+    - name: Download crictl
+      ansible.builtin.get_url:
+        url: >-
+          https://github.com/kubernetes-sigs/cri-tools/releases/download/{{ crictl_version }}/crictl-{{ crictl_version }}-linux-{{ go_arch }}.tar.gz
+        dest: "/tmp/crictl-{{ crictl_version }}-linux-{{ go_arch }}.tar.gz"
+        mode: "0644"
+        checksum: "{{ crictl_checksum | default(omit) }}"
+
+    - name: Install or upgrade crictl
+      ansible.builtin.unarchive:
+        src: "/tmp/crictl-{{ crictl_version }}-linux-{{ go_arch }}.tar.gz"
+        dest: /usr/local/bin
+        remote_src: true
+      when: >
+        installed_crictl.rc != 0 or
+        crictl_version not in installed_crictl.stdout
+
+    - name: Configure crictl endpoint
+      ansible.builtin.copy:
+        dest: /etc/crictl.yaml
+        mode: "0644"
+        content: |
+          runtime-endpoint: unix:///run/containerd/containerd.sock
+          image-endpoint: unix:///run/containerd/containerd.sock
+          timeout: 10
+
+    # 8. nerdctl：仅作为运维工具，不改变其默认 namespace
+    - name: Check installed nerdctl version
+      ansible.builtin.command: /usr/local/bin/nerdctl --version
+      register: installed_nerdctl
+      failed_when: false
+      changed_when: false
+
+    - name: Download nerdctl
+      ansible.builtin.get_url:
+        url: >-
+          https://github.com/containerd/nerdctl/releases/download/v{{ nerdctl_version }}/nerdctl-{{ nerdctl_version }}-linux-{{ go_arch }}.tar.gz
+        dest: "/tmp/nerdctl-{{ nerdctl_version }}-linux-{{ go_arch }}.tar.gz"
+        mode: "0644"
+        checksum: "{{ nerdctl_checksum | default(omit) }}"
+
+    - name: Install or upgrade nerdctl
+      ansible.builtin.unarchive:
+        src: "/tmp/nerdctl-{{ nerdctl_version }}-linux-{{ go_arch }}.tar.gz"
+        dest: /usr/local/bin
+        remote_src: true
+      when: >
+        installed_nerdctl.rc != 0 or
+        nerdctl_version not in installed_nerdctl.stdout
+
+    # 先执行可能待处理的重启，再检查运行时
+    - name: Apply pending service changes
+      ansible.builtin.meta: flush_handlers
+
+    - name: Check runc version
+      ansible.builtin.command: runc --version
+      changed_when: false
+
+    - name: Check containerd effective configuration
+      ansible.builtin.command: /usr/local/bin/containerd config dump
+      register: containerd_effective_config
+      changed_when: false
+
+    - name: Assert systemd cgroups are enabled in effective config
+      ansible.builtin.assert:
+        that:
+          - "'SystemdCgroup = true' in containerd_effective_config.stdout"
+        fail_msg: "containerd 生效配置中未找到 SystemdCgroup = true。"
+
+    - name: Check CRI connection
+      ansible.builtin.command: /usr/local/bin/crictl info
+      changed_when: false
+
+    - name: Display cgroup version
+      ansible.builtin.stat:
+        path: /sys/fs/cgroup/cgroup.controllers
+      register: cgroup_v2_check
+
+    - name: Report cgroup version
+      ansible.builtin.debug:
+        msg: >-
+          Cgroup version:
+          {{ 'v2' if cgroup_v2_check.stat.exists else 'v1' }}
+
+  handlers:
+    - name: Restart chrony
+      ansible.builtin.systemd:
+        name: chrony
+        state: restarted
+
+    - name: Restart containerd
+      ansible.builtin.systemd:
+        name: containerd
+        daemon_reload: true
+        state: restarted
