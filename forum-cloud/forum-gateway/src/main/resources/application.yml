@@ -1,0 +1,117 @@
+# forum-gateway：业务端口 4433，管理端口 9080
+server:
+  port: ${SERVER_PORT:4433}
+
+spring:
+  application:
+    name: forum-gateway
+  data:
+    redis:
+      host: "${FORUM_REDIS_HOST:localhost}"
+      port: ${FORUM_REDIS_PORT:6379}
+      password: "${FORUM_REDIS_PASSWORD:}"
+      database: ${FORUM_REDIS_DB:0}
+      timeout: 2s
+  security:
+    jwt:
+      # 必须与 user-service / monolith 使用同一个密钥
+      key: "${FORUM_JWT_SECRET:dev-only-change-me-32-bytes-minimum}"
+  codec:
+    max-in-memory-size: 10MB
+  cloud:
+    nacos:
+      discovery:
+        server-addr: "${NACOS_ADDR:127.0.0.1:8848}"
+        enabled: ${NACOS_ENABLED:true}
+        register-enabled: ${NACOS_ENABLED:true}
+        namespace: "${NACOS_NAMESPACE:}"
+    gateway:
+      discovery:
+        locator:
+          enabled: false
+      httpclient:
+        connect-timeout: 3000
+        response-timeout: 10s
+      globalcors:
+        add-to-simple-url-handler-mapping: true
+        cors-configurations:
+          '[/**]':
+            allowedOriginPatterns:
+              - "http://localhost:5173"
+              - "http://127.0.0.1:5173"
+              - "http://localhost:4173"
+              - "http://127.0.0.1:4173"
+            allowedMethods: "*"
+            allowedHeaders: "*"
+            exposedHeaders: "X-Request-Id"
+            allowCredentials: true
+            maxAge: 3600
+      default-filters:
+        - name: RequestRateLimiter
+          args:
+            redis-rate-limiter.replenishRate: 50
+            redis-rate-limiter.burstCapacity: 100
+            redis-rate-limiter.requestedTokens: 1
+            key-resolver: "#{@ipKeyResolver}"
+      routes:
+        - id: forum-user-service
+          # 静态模式：FORUM_USER_URI=http://localhost:8082
+          uri: "${FORUM_USER_URI:lb://forum-user-service}"
+          predicates:
+            - Path=/api/auth/**,/api/user/**
+        - id: forum-weather
+          # 静态模式：FORUM_WEATHER_URI=http://localhost:8086
+          uri: "${FORUM_WEATHER_URI:lb://forum-weather-service}"
+          predicates:
+            - Path=/api/forum/weather
+        - id: forum-content-service
+          # 静态模式：FORUM_CONTENT_URI=http://localhost:8083
+          uri: "${FORUM_CONTENT_URI:lb://forum-content-service}"
+          predicates:
+            - Path=/api/forum/**
+        - id: forum-notification-service
+          # 静态模式：FORUM_NOTIFICATION_URI=http://localhost:8084
+          uri: "${FORUM_NOTIFICATION_URI:lb://forum-notification-service}"
+          predicates:
+            - Path=/api/notification/**
+        - id: forum-media-service
+          # 静态模式：FORUM_MEDIA_URI=http://localhost:8085
+          uri: "${FORUM_MEDIA_URI:lb://forum-media-service}"
+          predicates:
+            - Path=/api/image/**,/images/**
+
+forum:
+  gateway:
+    jwt:
+      enabled: ${GATEWAY_JWT_ENABLED:true}
+      public-paths: "/api/auth/,/images/"
+
+# Phase 2：网关管理端点独立，不经过自身路由
+management:
+  server:
+    port: ${MANAGEMENT_PORT:9080}
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+      slo:
+        http.server.requests: 100ms,300ms,1s,3s
+    web:
+      server:
+        max-uri-tags: 50
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when_authorized
+    prometheus:
+      enabled: true
+
+logging:
+  level:
+    org.springframework.cloud.gateway: INFO
+    com.example.gateway: INFO

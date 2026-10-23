@@ -1,0 +1,30 @@
+# Build output
+**/target/
+**/node_modules/
+frontend-jwt/dist/
+frontend-jwt/.vite/
+
+# IDE / OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+
+# Secrets / local config
+.env
+.env.local
+.env.*.local
+!.env.example
+*.jks
+*.p12
+*.pem
+*.key
+
+# Local data dumps / backups
+backups/
+study.sql

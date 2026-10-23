@@ -1,0 +1,51 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: forum-local
+
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+scrape_configs:
+  - job_name: forum-gateway
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["host.docker.internal:9080"]
+        labels:
+          service: forum-gateway
+
+  - job_name: forum-user-service
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["host.docker.internal:9082"]
+        labels:
+          service: forum-user-service
+
+  - job_name: forum-content-service
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["host.docker.internal:9083"]
+        labels:
+          service: forum-content-service
+
+  - job_name: forum-notification-service
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["host.docker.internal:9084"]
+        labels:
+          service: forum-notification-service
+
+  - job_name: forum-media-service
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["host.docker.internal:9085"]
+        labels:
+          service: forum-media-service
+
+  - job_name: forum-weather-service
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["host.docker.internal:9086"]
+        labels:
+          service: forum-weather-service

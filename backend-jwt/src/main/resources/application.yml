@@ -1,0 +1,54 @@
+# 敏感项统一通过环境变量注入；本地开发可参考 backend-jwt/.env.example。
+# 注意：不要把真实密码、邮箱授权码、第三方 API Key 提交到仓库。
+server:
+  port: ${SERVER_PORT:4433}
+
+spring:
+  data:
+    redis:
+      host: "${FORUM_REDIS_HOST:localhost}"
+      port: ${FORUM_REDIS_PORT:6379}
+      password: "${FORUM_REDIS_PASSWORD:}"
+      database: ${FORUM_REDIS_DB:0}
+      timeout: 2s
+  security:
+    jwt:
+      # 生产环境必须设置 FORUM_JWT_SECRET（至少 32 字节），不要使用默认值。
+      key: "${FORUM_JWT_SECRET:dev-only-change-me-32-bytes-minimum}"
+      expire: ${FORUM_JWT_EXPIRE_DAYS:7}
+  mail:
+    host: "${FORUM_MAIL_HOST:smtp.163.com}"
+    port: ${FORUM_MAIL_PORT:465}
+    username: "${FORUM_MAIL_USERNAME:}"
+    password: "${FORUM_MAIL_PASSWORD:}"
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+          ssl:
+            enable: true
+            trust: "${FORUM_MAIL_SSL_TRUST:smtp.163.com}"
+  rabbitmq:
+    addresses: "${FORUM_RABBIT_ADDR:localhost}"
+    username: "${FORUM_RABBIT_USERNAME:admin}"
+    password: "${FORUM_RABBIT_PASSWORD:}"
+    virtual-host: /
+    trusted-packages: "com.example"
+  datasource:
+    username: "${FORUM_DB_USERNAME:root}"
+    # 本地开发默认 root；生产环境必须用 FORUM_DB_PASSWORD 覆盖。
+    password: "${FORUM_DB_PASSWORD:root}"
+    url: "${FORUM_DB_URL:jdbc:mysql://localhost:3306/study}"
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  minio:
+    endpoint: "${FORUM_MINIO_ENDPOINT:http://localhost:9000}"
+    username: "${FORUM_MINIO_USERNAME:minio}"
+    password: "${FORUM_MINIO_PASSWORD:minioadmin}"
+  weather:
+    key: "${FORUM_WEATHER_KEY:}"
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB

@@ -1,0 +1,66 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "graphTooltip": 0,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "percentunit"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "id": 1,
+      "targets": [{"expr": "sum(rate(forum_topic_cache_total{result=\"hit\"}[5m])) / clamp_min(sum(rate(forum_topic_cache_total[5m])), 0.001)", "legendFormat": "topic list cache hit", "refId": "A"}],
+      "title": "Topic List Cache Hit Ratio",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "id": 2,
+      "targets": [{"expr": "sum(rate(forum_interaction_total[5m])) by (type)", "legendFormat": "{{type}}", "refId": "A"}],
+      "title": "Interactions by Type",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "id": 3,
+      "targets": [{"expr": "sum(rate(forum_media_upload_total{result=\"success\"}[5m])) by (kind)", "legendFormat": "upload {{kind}}", "refId": "A"}, {"expr": "sum(rate(forum_media_fetch_total{result=\"failure\"}[5m]))", "legendFormat": "fetch failure/s", "refId": "B"}],
+      "title": "Media Upload / Fetch",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "id": 4,
+      "targets": [{"expr": "sum(rate(forum_weather_request_total[5m])) by (result)", "legendFormat": "{{result}}", "refId": "A"}],
+      "title": "Weather Requests by Result",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+      "id": 5,
+      "targets": [{"expr": "forum_notification_pending", "legendFormat": "pending", "refId": "A"}, {"expr": "forum_dau", "legendFormat": "DAU", "refId": "B"}, {"expr": "forum_users_total", "legendFormat": "users total", "refId": "C"}],
+      "title": "Notification Backlog / Users",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+      "id": 6,
+      "targets": [{"expr": "sum(rate(forum_mq_publish_total[5m])) by (event, result)", "legendFormat": "{{event}} {{result}}", "refId": "A"}, {"expr": "sum(rate(forum_notification_consume_total[5m])) by (result)", "legendFormat": "consume {{result}}", "refId": "B"}],
+      "title": "MQ Publish / Consume",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "15s",
+  "schemaVersion": 39,
+  "tags": ["forum", "business"],
+  "templating": {"list": []},
+  "time": {"from": "now-1h", "to": "now"},
+  "timezone": "browser",
+  "title": "Forum Business",
+  "uid": "forum-business",
+  "version": 1
+}

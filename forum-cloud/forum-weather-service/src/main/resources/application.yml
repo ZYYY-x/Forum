@@ -1,0 +1,50 @@
+server:
+  port: ${SERVER_PORT:8086}
+
+spring:
+  application:
+    name: forum-weather-service
+  data:
+    redis:
+      host: "${FORUM_REDIS_HOST:localhost}"
+      port: ${FORUM_REDIS_PORT:6379}
+      password: "${FORUM_REDIS_PASSWORD:}"
+      database: ${FORUM_REDIS_DB:0}
+      timeout: 2s
+  cloud:
+    nacos:
+      discovery:
+        server-addr: "${NACOS_ADDR:127.0.0.1:8848}"
+        enabled: ${NACOS_ENABLED:true}
+        register-enabled: ${NACOS_ENABLED:true}
+        namespace: "${NACOS_NAMESPACE:}"
+  security:
+    jwt:
+      key: "${FORUM_JWT_SECRET:dev-only-change-me-32-bytes-minimum}"
+      expire: ${FORUM_JWT_EXPIRE_DAYS:7}
+  weather:
+    key: "${FORUM_WEATHER_KEY:}"
+
+management:
+  server:
+    port: ${MANAGEMENT_PORT:9086}
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+      slo:
+        http.server.requests: 100ms,300ms,1s,3s
+    web:
+      server:
+        max-uri-tags: 50
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when_authorized
+    prometheus:
+      enabled: true
