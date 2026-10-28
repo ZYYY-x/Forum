@@ -35,10 +35,14 @@ spring:
       key: "${FORUM_JWT_SECRET:dev-only-change-me-32-bytes-minimum}"
       expire: ${FORUM_JWT_EXPIRE_DAYS:7}
   datasource:
-    username: "${FORUM_CONTENT_DB_USERNAME:root}"
-    password: "${FORUM_CONTENT_DB_PASSWORD:root}"
-    url: "${FORUM_CONTENT_DB_URL:jdbc:mysql://localhost:3306/forum_content}"
-    driver-class-name: com.mysql.cj.jdbc.Driver
+    username: "${FORUM_CONTENT_DB_USERNAME:postgres}"
+    password: "${FORUM_CONTENT_DB_PASSWORD:}"
+    url: "${FORUM_CONTENT_DB_URL:jdbc:postgresql://localhost:5432/postgres?currentSchema=forum_content&sslmode=prefer}"
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: ${FORUM_DB_POOL_MAX:10}
+      minimum-idle: 2
+      connection-timeout: 30000
 
 forum:
   services:

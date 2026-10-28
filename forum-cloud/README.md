@@ -50,7 +50,7 @@ forum-weather-service/target/forum-weather-service.jar
 
 ### 方式 A：静态路由（无需 Nacos）
 
-需要 Redis、RabbitMQ、MySQL、MinIO。
+需要 Redis、RabbitMQ、PostgreSQL（本地或 AWS RDS）、MinIO。
 
 ```powershell
 $env:NACOS_ENABLED = 'false'
@@ -113,11 +113,22 @@ $env:FORUM_INTERNAL_TOKEN = 'dev-internal-token'
 | 服务 | 业务端口 | 管理端口 | 数据源 |
 |---|---:|---:|---|
 | `forum-gateway` | 4433 | 9080 | 无 |
-| `forum-user-service` | 8082 | 9082 | `forum_user` |
-| `forum-content-service` | 8083 | 9083 | `forum_content` |
-| `forum-notification-service` | 8084 | 9084 | `forum_notification` |
-| `forum-media-service` | 8085 | 9085 | `forum_media` |
+| `forum-user-service` | 8082 | 9082 | `postgres / forum_user` |
+| `forum-content-service` | 8083 | 9083 | `postgres / forum_content` |
+| `forum-notification-service` | 8084 | 9084 | `postgres / forum_notification` |
+| `forum-media-service` | 8085 | 9085 | `postgres / forum_media` |
 | `forum-weather-service` | 8086 | 9086 | 无 |
+
+四个数据库服务共用一个 PostgreSQL `postgres` database，通过 JDBC `currentSchema` 隔离：
+
+```text
+jdbc:postgresql://<rds-endpoint>:5432/postgres?sslmode=require&currentSchema=forum_user
+jdbc:postgresql://<rds-endpoint>:5432/postgres?sslmode=require&currentSchema=forum_content
+jdbc:postgresql://<rds-endpoint>:5432/postgres?sslmode=require&currentSchema=forum_notification
+jdbc:postgresql://<rds-endpoint>:5432/postgres?sslmode=require&currentSchema=forum_media
+```
+
+AWS RDS 初始化使用 `deploy/sql/postgres/`；本地 MySQL 旧脚本仅作 legacy。详见 [`deploy/sql/README.md`](../deploy/sql/README.md)。
 
 ## 网关路由
 
@@ -186,10 +197,10 @@ docker compose up -d
 参考 `.env.example`。当前环境至少需要：
 
 ```text
-FORUM_USER_DB_PASSWORD
-FORUM_CONTENT_DB_PASSWORD
-FORUM_NOTIFICATION_DB_PASSWORD
-FORUM_MEDIA_DB_PASSWORD
+FORUM_USER_DB_URL / FORUM_USER_DB_PASSWORD
+FORUM_CONTENT_DB_URL / FORUM_CONTENT_DB_PASSWORD
+FORUM_NOTIFICATION_DB_URL / FORUM_NOTIFICATION_DB_PASSWORD
+FORUM_MEDIA_DB_URL / FORUM_MEDIA_DB_PASSWORD
 FORUM_REDIS_HOST / FORUM_REDIS_PORT / FORUM_REDIS_PASSWORD
 FORUM_RABBIT_ADDR / FORUM_RABBIT_USERNAME / FORUM_RABBIT_PASSWORD
 FORUM_MINIO_ENDPOINT / FORUM_MINIO_USERNAME / FORUM_MINIO_PASSWORD

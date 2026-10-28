@@ -177,7 +177,26 @@ FORUM_MINIO_ENDPOINT / FORUM_MINIO_USERNAME / FORUM_MINIO_PASSWORD
 
 # weather
 FORUM_WEATHER_KEY
+```
 
+### AWS RDS PostgreSQL
+
+四个有数据库的服务共用 RDS 的 `postgres` 数据库，通过 schema 隔离：
+
+```text
+FORUM_USER_DB_URL=jdbc:postgresql://<rds-endpoint>:5432/postgres?sslmode=require&currentSchema=forum_user
+FORUM_CONTENT_DB_URL=jdbc:postgresql://<rds-endpoint>:5432/postgres?sslmode=require&currentSchema=forum_content
+FORUM_NOTIFICATION_DB_URL=jdbc:postgresql://<rds-endpoint>:5432/postgres?sslmode=require&currentSchema=forum_notification
+FORUM_MEDIA_DB_URL=jdbc:postgresql://<rds-endpoint>:5432/postgres?sslmode=require&currentSchema=forum_media
+```
+
+- 初始化 DDL：`deploy/sql/postgres/`；
+- RDS 安全组只允许 EKS 节点/Pod 的 VPC CIDR 或安全组；
+- 生产用 Secrets Manager/External Secrets 注入密码；
+- 连接池上限按 Pod 数评估，避免超过 RDS `max_connections`；
+- 需要更严格 TLS 时下载 RDS CA，使用 `sslmode=verify-full`。
+
+```text
 # gateway 静态路由（Nacos 模式用 lb://）
 FORUM_USER_URI
 FORUM_CONTENT_URI
