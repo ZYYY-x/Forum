@@ -1,100 +1,98 @@
 # SQL 使用说明
 
-## 当前目标：AWS RDS PostgreSQL
+## 当前目标：AWS RDS MySQL 8.0
 
-AWS RDS/Aurora PostgreSQL 使用 **一个 `postgres` 数据库 + 四个 schema**，不再使用四个独立 MySQL database。
+四个业务数据库：
 
 ```text
-postgres
-├─ forum_user
-├─ forum_content
-├─ forum_notification
-└─ forum_media
+forum_user
+forum_content
+forum_notification
+forum_media
 ```
 
-DDL 在 [`postgres/`](postgres/)：
+DDL 文件：
 
 | 顺序 | 文件 | 作用 |
 |---|---|---|
-| 0 | `postgres/00_create_schemas.sql` | 创建四个 schema |
-| 1 | `postgres/01_user.sql` | 用户/资料/隐私 |
-| 2 | `postgres/02_content.sql` | 帖子/类型/评论/互动/快照 |
-| 3 | `postgres/03_notification.sql` | 站内通知 |
-| 4 | `postgres/04_media.sql` | 图片元数据 |
-| 5 | `postgres/05_seed_topic_types.sql` | 可选：5 个基础帖子类型 |
+| 0 | `00_create_databases.sql` | 创建四个 database |
+| 1 | `01_user.sql` | 用户/资料/隐私 |
+| 2 | `02_content.sql` | 帖子/类型/评论/互动/快照 |
+| 3 | `03_notification.sql` | 站内通知 |
+| 4 | `04_media.sql` | 图片元数据 |
+| 5 | `05_seed_topic_types.sql` | 可选：5 个基础帖子类型 |
+| 6 | `10_migrate_from_study.sql` | 本地 `study` 库历史数据迁移（MySQL） |
 
-### 初始化
+## 初始化 AWS RDS MySQL
 
 ```bash
-psql "host=<rds-endpoint> port=5432 dbname=postgres user=postgres sslmode=require" \
-  -f deploy/sql/postgres/00_create_schemas.sql
+mysql -h <rds-endpoint> -P 3306 -u <master-user> -p \
+  < deploy/sql/00_create_databases.sql
 
-psql "host=<rds-endpoint> port=5432 dbname=postgres user=postgres sslmode=require" \
-  -f deploy/sql/postgres/01_user.sql
+mysql -h <rds-endpoint> -P 3306 -u <master-user> -p \
+  < deploy/sql/01_user.sql
 
-# 02 / 03 / 04 / 05 同理
+mysql -h <rds-endpoint> -P 3306 -u <master-user> -p \
+  < deploy/sql/02_content.sql
+
+mysql -h <rds-endpoint> -P 3306 -u <master-user> -p \
+  < deploy/sql/03_notification.sql
+
+mysql -h <rds-endpoint> -P 3306 -u <master-user> -p \
+  < deploy/sql/04_media.sql
+
+# 可选
+mysql -h <rds-endpoint> -P 3306 -u <master-user> -p \
+  < deploy/sql/05_seed_topic_types.sql
 ```
 
-也可以进入 psql 后执行：
+每个 DDL 内部有 `USE forum_*`，无需额外指定 database。
 
-```sql
-\i deploy/sql/postgres/00_create_schemas.sql
-\i deploy/sql/postgres/01_user.sql
-...
-```
-
-### 应用连接串
-
-四个服务连接同一个 RDS 实例，通过 `currentSchema` 隔离：
+## 应用连接串
 
 ```text
-user:
-jdbc:postgresql://<rds-endpoint>:5432/postgres?sslmode=require&currentSchema=forum_user
-
-content:
-jdbc:postgresql://<rds-endpoint>:5432/postgres?sslmode=require&currentSchema=forum_content
-
-notification:
-jdbc:postgresql://<rds-endpoint>:5432/postgres?sslmode=require&currentSchema=forum_notification
-
-media:
-jdbc:postgresql://<rds-endpoint>:5432/postgres?sslmode=require&currentSchema=forum_media
+FORUM_USER_DB_URL=jdbc:mysql://<rds-endpoint>:3306/forum_user?sslMode=REQUIRED&serverTimezone=UTC&characterEncoding=utf8
+FORUM_CONTENT_DB_URL=jdbc:mysql://<rds-endpoint>:3306/forum_content?sslMode=REQUIRED&serverTimezone=UTC&characterEncoding=utf8
+FORUM_NOTIFICATION_DB_URL=jdbc:mysql://<rds-endpoint>:3306/forum_notification?sslMode=REQUIRED&serverTimezone=UTC&characterEncoding=utf8
+FORUM_MEDIA_DB_URL=jdbc:mysql://<rds-endpoint>:3306/forum_media?sslMode=REQUIRED&serverTimezone=UTC&characterEncoding=utf8
 ```
 
-对应环境变量：
+生产环境：
 
-```text
-FORUM_USER_DB_URL / FORUM_USER_DB_USERNAME / FORUM_USER_DB_PASSWORD
-FORUM_CONTENT_DB_URL / FORUM_CONTENT_DB_USERNAME / FORUM_CONTENT_DB_PASSWORD
-FORUM_NOTIFICATION_DB_URL / FORUM_NOTIFICATION_DB_USERNAME / FORUM_NOTIFICATION_DB_PASSWORD
-FORUM_MEDIA_DB_URL / FORUM_MEDIA_DB_USERNAME / FORUM_MEDIA_DB_PASSWORD
-```
-
-生产环境建议：
-
-- 使用 Secrets Manager / K8s Secret 注入密码，不写入镜像；
+- 使用 Secrets Manager / K8s Secret 注入密码；
 - RDS 安全组只允许 EKS 节点/Pod 的 VPC CIDR 或安全组；
-- 强制 `sslmode=require`（更严格可下载 RDS CA 后使用 `verify-full`）；
+- 建议用 TLS：`sslMode=REQUIRED`；
 - 连接池上限按 Pod 数 × 每 Pod 连接数评估，避免打满 RDS `max_connections`。
 
-### 数据库账号
+## 本地 MySQL 初始化
 
-快速验证可以直接用 RDS master `postgres`。生产建议创建独立应用账号，并只授予所需 schema：
-
-```sql
-CREATE ROLE forum_app LOGIN PASSWORD '<strong-password>';
-GRANT CONNECT ON DATABASE postgres TO forum_app;
-GRANT USAGE ON SCHEMA forum_user, forum_content, forum_notification, forum_media TO forum_app;
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA
-  forum_user, forum_content, forum_notification, forum_media TO forum_app;
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA
-  forum_user, forum_content, forum_notification, forum_media TO forum_app;
+```bash
+mysql -uroot -p < deploy/sql/00_create_databases.sql
+mysql -uroot -p < deploy/sql/01_user.sql
+mysql -uroot -p < deploy/sql/02_content.sql
+mysql -uroot -p < deploy/sql/03_notification.sql
+mysql -uroot -p < deploy/sql/04_media.sql
+mysql -uroot -p < deploy/sql/05_seed_topic_types.sql
 ```
 
-## MySQL 旧脚本（legacy）
+本地 URL 可去掉 TLS：
 
-根目录的 `00_create_databases.sql`、`01_user.sql` 等是早期本地 MySQL 8 脚本，保留用于旧环境回归，不是 AWS 目标。
+```text
+jdbc:mysql://localhost:3306/forum_user?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&characterEncoding=utf8
+```
 
-- `10_migrate_from_study.sql` 是 MySQL → MySQL 的历史数据迁移脚本；
-- 如果确实要把本地 `study` 数据带到 AWS，需要单独做 MySQL → PostgreSQL 的数据抽取/转换（ETL），不能直接执行该脚本；
-- 新环境建议只执行 `postgres/` 下的 DDL + 种子数据。
+## 数据迁移
+
+`10_migrate_from_study.sql` 是 MySQL → MySQL 迁移：
+
+```bash
+mysql -uroot -p < deploy/sql/00_create_databases.sql
+mysql -uroot -p < deploy/sql/01_user.sql
+mysql -uroot -p < deploy/sql/02_content.sql
+mysql -uroot -p < deploy/sql/03_notification.sql
+mysql -uroot -p < deploy/sql/04_media.sql
+mysql -uroot -p --default-character-set=utf8mb4 < deploy/sql/10_migrate_from_study.sql
+```
+
+> 根目录 `study.sql` 是 Navicat 原始导出，含 `DROP TABLE`，不要直接对现有库执行。
+> 迁移前请先备份；迁移脚本默认源库互动表主键已修复为 `(tid, uid)`。

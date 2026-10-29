@@ -14,11 +14,10 @@ import java.util.List;
 public interface TopicMapper extends BaseMapper<Topic> {
     @Insert("""
             <script>
-                insert into db_topic_interact_${type} (tid, uid, time) values
+                insert ignore into db_topic_interact_${type} values
                 <foreach collection ="interacts" item="item" separator =",">
                     (#{item.tid}, #{item.uid}, #{item.time})
                 </foreach>
-                on conflict (tid, uid) do nothing
             </script>
             """)
     void addInteract(List<Interact> interacts, String type);

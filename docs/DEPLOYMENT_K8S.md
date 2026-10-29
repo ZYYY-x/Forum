@@ -179,22 +179,22 @@ FORUM_MINIO_ENDPOINT / FORUM_MINIO_USERNAME / FORUM_MINIO_PASSWORD
 FORUM_WEATHER_KEY
 ```
 
-### AWS RDS PostgreSQL
+### AWS RDS MySQL
 
-四个有数据库的服务共用 RDS 的 `postgres` 数据库，通过 schema 隔离：
+四个有数据库的服务分别连接 RDS 的四个 database：
 
 ```text
-FORUM_USER_DB_URL=jdbc:postgresql://<rds-endpoint>:5432/postgres?sslmode=require&currentSchema=forum_user
-FORUM_CONTENT_DB_URL=jdbc:postgresql://<rds-endpoint>:5432/postgres?sslmode=require&currentSchema=forum_content
-FORUM_NOTIFICATION_DB_URL=jdbc:postgresql://<rds-endpoint>:5432/postgres?sslmode=require&currentSchema=forum_notification
-FORUM_MEDIA_DB_URL=jdbc:postgresql://<rds-endpoint>:5432/postgres?sslmode=require&currentSchema=forum_media
+FORUM_USER_DB_URL=jdbc:mysql://<rds-endpoint>:3306/forum_user?sslMode=REQUIRED&serverTimezone=UTC&characterEncoding=utf8
+FORUM_CONTENT_DB_URL=jdbc:mysql://<rds-endpoint>:3306/forum_content?sslMode=REQUIRED&serverTimezone=UTC&characterEncoding=utf8
+FORUM_NOTIFICATION_DB_URL=jdbc:mysql://<rds-endpoint>:3306/forum_notification?sslMode=REQUIRED&serverTimezone=UTC&characterEncoding=utf8
+FORUM_MEDIA_DB_URL=jdbc:mysql://<rds-endpoint>:3306/forum_media?sslMode=REQUIRED&serverTimezone=UTC&characterEncoding=utf8
 ```
 
-- 初始化 DDL：`deploy/sql/postgres/`；
+- 初始化 DDL：`deploy/sql/00_create_databases.sql` 和 `01~05`；
 - RDS 安全组只允许 EKS 节点/Pod 的 VPC CIDR 或安全组；
 - 生产用 Secrets Manager/External Secrets 注入密码；
 - 连接池上限按 Pod 数评估，避免超过 RDS `max_connections`；
-- 需要更严格 TLS 时下载 RDS CA，使用 `sslmode=verify-full`。
+- 建议启用 TLS：`sslMode=REQUIRED`。
 
 ```text
 # gateway 静态路由（Nacos 模式用 lb://）

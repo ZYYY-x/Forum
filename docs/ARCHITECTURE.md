@@ -23,7 +23,7 @@ flowchart TB
 
     subgraph Infra["基础设施"]
         NACOS["Nacos<br/>注册/发现"]
-        RDS[("Amazon RDS PostgreSQL<br/>postgres + schemas")]
+        RDS[("Amazon RDS MySQL 8<br/>4 databases")]
         REDIS[("Redis")]
         RABBIT[("RabbitMQ")]
         MINIO[("MinIO")]
@@ -107,7 +107,7 @@ flowchart TB
 
 ```text
 Browser → frontend → gateway → user-service
-  → PostgreSQL 校验账号
+  → MySQL 校验账号
   → BCrypt 校验密码
   → JWT（含 uid/name/role/jti）
   → 返回 token/expire

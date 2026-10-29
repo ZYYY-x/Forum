@@ -12,7 +12,7 @@ public class TopicType implements BaseData {
     @TableId
     Integer id;
     String name;
-    @TableField("\"desc\"")
+    @TableField("`desc`")
     String desc;
     String color;
 }
