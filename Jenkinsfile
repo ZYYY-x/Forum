@@ -135,7 +135,7 @@ pipeline {
                         "https://${GIT_USER}:${GIT_PASS}@${GITOPS_REPO}" .gitops
                       cd .gitops
 
-                      sed -i -E "s#(newTag: ).*#\\1${TARGET_TAG}#" apps/forum/kustomization.yaml
+                      sed -i -E 's#(newTag: ).*#\1"'${TARGET_TAG}'"#' apps/forum/kustomization.yaml
 
                       git config user.email "jenkins@forum.local"
                       git config user.name  "Jenkins CI"
