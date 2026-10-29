@@ -1,0 +1,38 @@
+# Kaniko 构建 Job 模板（由 Jenkinsfile 用 sed 渲染后 kubectl apply）
+# 占位符：__JOB__ / __CONTEXT__ / __DOCKERFILE__ / __DEST__
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: __JOB__
+  namespace: ci
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 1800
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: kaniko
+          image: gcr.io/kaniko-project/executor:v1.23.2
+          args:
+            - "--context=git://github.com/ZYYY-x/Forum.git#refs/heads/master"
+            - "--context-sub-path=__CONTEXT__"
+            - "--dockerfile=__DOCKERFILE__"
+            - "--destination=__DEST__"
+            - "--insecure"
+            - "--skip-tls-verify"
+            - "--cache=true"
+            - "--cache-repo=18.183.238.1/forum/cache"
+            - "--snapshot-mode=redo"
+            - "--verbosity=info"
+          volumeMounts:
+            - name: docker-config
+              mountPath: /kaniko/.docker/config.json
+              subPath: .dockerconfigjson
+          resources:
+            requests: { cpu: 150m, memory: 1Gi }
+            limits: { cpu: 2, memory: 3Gi }
+      volumes:
+        - name: docker-config
+          secret:
+            secretName: harbor-regcred
